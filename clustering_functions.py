@@ -14,6 +14,7 @@ import bokeh
 from IPython.display import SVG
 from rdkit.Chem.Draw import rdMolDraw2D
 from bokeh.models import HoverTool
+from random import sample
 
 
 #interactive plotting things
