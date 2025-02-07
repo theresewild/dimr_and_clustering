@@ -8,13 +8,18 @@ from sklearn.neighbors import NearestNeighbors
 from math import isnan
 from numpy.random import uniform
 
-import holoviews as hv
-hv.extension('bokeh')
-import bokeh
+# import holov# iews as hv
+# hv.extension('bokeh')
+# import bokeh
 from IPython.display import SVG
 from rdkit.Chem.Draw import rdMolDraw2D
 from bokeh.models import HoverTool
 from random import sample
+
+import numpy as np
+import holoviews as hv
+from holoviews import dim
+hv.extension('bokeh')
 
 
 #interactive plotting things
@@ -52,6 +57,7 @@ def get_mol_svg(df, smiles_col= None, id_col = None, image_col = None, molSize=(
             svgs.append(SVG(svg).data)
         except:
             print (f'error for ID: {row[id_col]}. Please check SMILES: {smiles}')
+            svgs.append('no SMILES available')
             
     df.insert(smi_col_loc+1, image_col, svgs)
     return df
