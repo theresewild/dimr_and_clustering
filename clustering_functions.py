@@ -508,4 +508,217 @@ def plot_pca(features, ID, image, smiles, n_components=2, alpha=0.7, color='#7B1
     
     return pca_df
 
+def plot_feature_v_feature(features, ID, image, smiles,feature_x, feature_y, alpha=0.7, color='#7B1B79', marker='o', size=100, 
+             alpha_value_mapping=None, color_mapping=None, marker_mapping=None, size_mapping=None, plot_order=None,
+             feature_z=None, font_size=16, type_column=None, 
+             export_excel=False, excel_filename="feature1_vs_feature2_coordinates_df.xlsx",
+             save_plot=False, plot_filename="feature1_vs_feature2_plot.png"):
+    
+    if feature_z is not None:
+        chem_space_df = features[[feature_x, feature_y, feature_z]].copy()
+    else:
+        chem_space_df = features[[feature_x, feature_y]].copy()
+        
+    chem_space_df['name'] = ID
+    chem_space_df['image'] = image
+    chem_space_df['smiles'] = smiles
+    
+    if type_column is not None:
+        chem_space_df['type'] = type_column
+        unique_types = sorted(chem_space_df['type'].unique())
+        
+        default_colors = ['#712377', '#3B8F8F', '#A3C6BE', '#A44660', '#B4C285']
+        if len(default_colors) < len(unique_types):
+            cmap = cm.get_cmap('viridis', unique_types) 
+            default_colors = [cmap(i) for i in range(unique_types)]
+        
+        default_markers = ['s', 'o', 'D', '^', 'v', '*', 'X', 'P']
+        while len(default_markers) < len(unique_types):
+            default_markers.extend(default_markers)
+        
+        default_sizes = [50, 80, 100, 120, 140, 160, ]
+        while len(default_sizes) < len(unique_types):
+            default_sizes.extend(default_sizes)
+            
+        default_alpha = {t: 0.8 for t in unique_types}
+
+        color_mapping = color_mapping or {t: default_colors[i] for i, t in enumerate(unique_types)}
+        marker_mapping = marker_mapping or {t: default_markers[i] for i, t in enumerate(unique_types)}
+        size_mapping = size_mapping or {t: default_sizes[i] for i, t in enumerate(unique_types)}
+        alpha_value_mapping = alpha_value_mapping or default_alpha
+        
+        chem_space_df = map_alpha_by_col(chem_space_df, alpha_value_mapping, alpha=1)
+        chem_space_df = map_color_by_col(chem_space_df, color_mapping)
+        chem_space_df = map_marker_by_col(chem_space_df, marker_mapping)
+        chem_space_df = map_size_by_col(chem_space_df, size_mapping)
+        
+        plot_order = plot_order or unique_types  # Default to plotting all types
+        
+    else:
+        chem_space_df['alpha'] = alpha
+        chem_space_df['color'] = color
+        chem_space_df['marker'] = marker
+        chem_space_df['size'] = size
+        plot_order = [None]  # Only one category to plot
+    
+    fig = plt.figure(figsize=(6, 6))
+    
+    if feature_z is None:
+        ax = plt.gca()  # 2D plot
+        for t in plot_order:
+            subset = chem_space_df[chem_space_df['type'] == t] if t else chem_space_df
+            ax.scatter(subset[feature_x], subset[feature_y], 
+                       alpha=subset['alpha'].iloc[0], 
+                       color=subset['color'].iloc[0], 
+                       marker=subset['marker'].iloc[0], 
+                       s=subset['size'].iloc[0], label=t)
+        ax.set_xlabel(feature_x, fontsize=font_size)
+        ax.set_ylabel(feature_y, fontsize=font_size)
+    
+    else:
+        ax = fig.add_subplot(111, projection='3d')  # 3D plot
+        for t in plot_order:
+            subset = chem_space_df[chem_space_df['type'] == t] if t else chem_space_df
+            ax.scatter(subset[feature_x], subset[feature_y], subset[feature_z], 
+                       alpha=subset['alpha'].iloc[0], 
+                       color=subset['color'].iloc[0], 
+                       marker=subset['marker'].iloc[0], 
+                       s=subset['size'].iloc[0], label=t)
+        ax.set_xlabel(feature_x, fontsize=font_size)
+        ax.set_ylabel(feature_y, fontsize=font_size)
+        ax.set_zlabel(feature_z, fontsize=font_size)
+    
+    ax.tick_params(labelsize=font_size)
+    plt.legend(title='Type', fontsize=12)
+    
+    # Saving the plot and/or exporting the DataFrame
+    if save_plot:
+        plt.savefig(plot_filename, dpi=300, bbox_inches='tight')
+        print(f"Plot saved as {plot_filename}")
+    
+    if export_excel:
+        chem_space_df.to_excel(excel_filename, index=False)
+        print(f"PCA data saved to {excel_filename}")
+    
+    plt.show()
+    
+    return chem_space_df
+
+
+
+def silhouette_scores(data, X_coordinate_column, Y_coordinate_column,
+                      min_clusters, max_clusters, clustering_function, random_state):
+    scores = []
+    clusters_range = range(min_clusters, max_clusters + 1)
+
+    for n_clusters in clusters_range:
+        model, _ = clustering_function(data, X_coordinate_column, Y_coordinate_column, random_state, n_clusters, plot=False)  
+        coordinates = data[[X_coordinate_column, Y_coordinate_column]]
+        clusters = model.predict(coordinates)
+
+        silhouette_avg = silhouette_score(coordinates, clusters)
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+        visualizer = SilhouetteVisualizer(model, colors='yellowbrick', ax=ax)
+        visualizer.fit(coordinates)
+
+        plt.xlabel('Silhouette Score')
+        plt.title(f'Silhouette Score for {n_clusters} Clusters: {silhouette_avg:.2f}')
+        plt.show()
+
+        if len(set(clusters)) > 1:
+            scores.append(silhouette_avg)
+        else:
+            scores.append(-1)
+
+    plt.plot(clusters_range, scores, marker="o", linestyle="-")
+    plt.xlabel("Number of Clusters")
+    plt.ylabel("Silhouette Score")
+    plt.title("Silhouette Method")
+    plt.show()
+    
+    
+def kmeans_clustering(data, X_coordinate_column, Y_coordinate_column, random_state, n_clusters, plot=True):
+    coordinates = data[[X_coordinate_column, Y_coordinate_column]]
+    kmeans = KMeans(n_clusters=n_clusters, random_state=random_state)
+    clusters = kmeans.fit_predict(coordinates)  # Get cluster assignments
+    data['cluster'] = clusters  # Store cluster labels in DataFrame
+    
+    if plot:
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(x=X_coordinate_column, y=Y_coordinate_column, hue='cluster', 
+                        data=data, palette='viridis', s=100)
+        plt.xlabel(X_coordinate_column)
+        plt.ylabel(Y_coordinate_column)
+        plt.legend(title='Cluster')
+        plt.show()
+
+    return kmeans, data  # Return both the model and updated DataFrame
+
+
+def aic_bic_inertia_scores(data, X_coordinate_column, Y_coordinate_column,
+                            min_clusters, max_clusters, clustering_function, random_state):
+    n_clusters = np.arange(min_clusters, max_clusters + 1)
+    aic_scores = []
+    bic_scores = []
+    inertia_scores = []
+
+    coordinates = data[[X_coordinate_column, Y_coordinate_column]]
+
+    for n in n_clusters:
+        model, _ = clustering_function(data, X_coordinate_column, Y_coordinate_column, random_state, n_clusters=n, plot=False)
+        if hasattr(model, 'bic'):
+            bic_scores.append(model.bic(coordinates)) 
+        else:
+            bic_scores.append(np.nan) 
+
+        if hasattr(model, 'aic'):
+            aic_scores.append(model.aic(coordinates))
+        else:
+            aic_scores.append(np.nan) 
+        if hasattr(model, 'inertia_'):
+            inertia_scores.append(model.inertia_)  
+        else:
+            inertia_scores.append(np.nan) 
+
+    plt.figure(figsize=(6, 4))
+    if any(np.isfinite(aic_scores)):
+        plt.plot(n_clusters, aic_scores, marker="o", linestyle="-", label='AIC', color='blue')
+    if any(np.isfinite(bic_scores)):
+        plt.plot(n_clusters, bic_scores, marker="o", linestyle="-", label='BIC', color='green')
+    if any(np.isfinite(inertia_scores)):
+        plt.plot(n_clusters, inertia_scores, marker="o", linestyle="-", label='Inertia', color='red')
+
+    plt.xlabel('Number of Components/Clusters')
+    plt.ylabel('Score')
+    plt.title(f'Clustering Model Evaluation ({clustering_function.__name__})')
+    plt.legend(loc='best')
+    plt.show()
+    return {'aic': aic_scores, 'bic': bic_scores, 'inertia': inertia_scores}
+
+def gmm_clustering(data, X_coordinate_column, Y_coordinate_column, random_state, n_clusters, covariance_type='full', plot=True):
+    coordinates = data[[X_coordinate_column, Y_coordinate_column]]
+    gmm = GaussianMixture(n_components=n_clusters, random_state=random_state, covariance_type=covariance_type)
+    gmm.fit(coordinates)
+    clusters = gmm.predict(coordinates)
+    data['cluster'] = clusters
+
+    soft_labels = gmm.predict_proba(coordinates) #probability of a point belonging to each cluster
+    soft_labels_df = pd.DataFrame(soft_labels, columns=[f'prob_belonging_to_cluster_{i}' for i in range(n_clusters)])
+    
+    data_w_probability= pd.concat([data, soft_labels_df], axis=1)
+    
+    if plot:
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(x=X_coordinate_column, y=Y_coordinate_column, hue='cluster', 
+                        data=data, palette='viridis', s=100)
+        plt.xlabel(X_coordinate_column)
+        plt.ylabel(Y_coordinate_column)
+        plt.legend(title='Cluster')
+        plt.show()
+
+    return gmm, data_w_probability  # Return both the model and updated DataFrame
+
+gmm_clusters = gmm_clustering(df, X_coordinate_column, Y_coordinate_column, random_state, n_clusters)
+aic_bic_scores = aic_bic_inertia_scores(df, X_coordinate_column, Y_coordinate_column, 2, 10, gmm_clustering, random_state)
 
