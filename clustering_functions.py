@@ -26,6 +26,27 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
 
+from sklearn.cluster import KMeans, DBSCAN, Birch, OPTICS, AffinityPropagation
+from sklearn.mixture import GaussianMixture
+from sklearn.metrics import davies_bouldin_score, silhouette_score, pairwise_distances, silhouette_samples
+from sklearn.neighbors import NearestNeighbors
+from random import sample
+from math import isnan
+from numpy.random import uniform
+from sklearn.decomposition import PCA,NMF
+
+import holoviews as hv
+hv.extension('bokeh')
+import bokeh
+from IPython.display import SVG
+from rdkit.Chem.Draw import rdMolDraw2D
+from bokeh.models import HoverTool
+from bokeh.resources import INLINE
+from yellowbrick.cluster import SilhouetteVisualizer
+from bokeh.io import show
+import importlib
+import clustering_functions as cf
+
 
 #interactive plotting things
 # adapted from https://rdkit.blogspot.com/2020/04/new-drawing-options-in-202003-release.html and https://birdlet.github.io/2018/06/06/rdkit_svg_web/
@@ -719,6 +740,80 @@ def gmm_clustering(data, X_coordinate_column, Y_coordinate_column, random_state,
 
     return gmm, data_w_probability  # Return both the model and updated DataFrame
 
-gmm_clusters = gmm_clustering(df, X_coordinate_column, Y_coordinate_column, random_state, n_clusters)
-aic_bic_scores = aic_bic_inertia_scores(df, X_coordinate_column, Y_coordinate_column, 2, 10, gmm_clustering, random_state)
+def hdbscan_clustering(data, X_coordinate_column, Y_coordinate_column, random_state,min_cluster_size, min_samples, distance_metric, plot=True):
+    coordinates = data[[X_coordinate_column, Y_coordinate_column]]
+    hdbscan_clustering = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples, metric=distance_metric)
+    hdbscan_clusters = hdbscan_clustering.fit_predict(coordinates)  
+    clustered_points = (hdbscan_clusters != -1)  # points that are not noise
+    
+    data['cluster'] = hdbscan_clusters 
+    print("Fraction of points clustered:",np.sum(clustered_points) / data.shape[0])
+    
+    if plot:
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(x=X_coordinate_column, y=Y_coordinate_column, hue='cluster', 
+                        data=data, palette='viridis', s=100)
+        plt.xlabel(X_coordinate_column)
+        plt.ylabel(Y_coordinate_column)
+        plt.legend(title='Cluster')
+        plt.show()
+
+    return hdbscan_clustering, data 
+
+def dbscan_clustering(data, X_coordinate_column, Y_coordinate_column, random_state,  distance_metric, eps=0.5, min_samples=5, plot=True):
+    coordinates = data[[X_coordinate_column, Y_coordinate_column]]
+    dbscan_clustering = DBSCAN(eps=eps, min_samples=min_samples, metric=distance_metric)
+    dbscan_clusters = dbscan_clustering.fit_predict(coordinates)  
+    clustered_points = (dbscan_clusters != -1)  # points that are not noise
+    data['cluster'] = dbscan_clusters 
+    
+    print("Fraction of points clustered:",np.sum(clustered_points) / data.shape[0])
+    
+    if plot:
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(x=X_coordinate_column, y=Y_coordinate_column, hue='cluster', 
+                        data=data, palette='viridis', s=100)
+        plt.xlabel(X_coordinate_column)
+        plt.ylabel(Y_coordinate_column)
+        plt.legend(title='Cluster')
+        plt.show()
+
+    return dbscan_clustering, data 
+
+
+def agglomerative_clustering(data, X_coordinate_column, Y_coordinate_column, random_state, n_clusters, distance_metric='euclidean', linkage_type='ward', plot=True):
+    coordinates = data[[X_coordinate_column, Y_coordinate_column]]
+    agg_clustering= AgglomerativeClustering(n_clusters=n_clusters, metric=distance_metric, linkage=linkage_type)
+    agg_clusters = agg_clustering.fit_predict(coordinates)
+    data['cluster'] = agg_clusters
+
+    if plot:
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(x=X_coordinate_column, y=Y_coordinate_column, hue='cluster', 
+                        data=data, palette='viridis', s=100)
+        plt.xlabel(X_coordinate_column)
+        plt.ylabel(Y_coordinate_column)
+        plt.legend(title='Cluster')
+        plt.show()
+
+    return agg_clustering, data
+
+def elbow_method(data, X_coordinate_column, Y_coordinate_column, min_clusters, max_clusters, clustering_function, random_state):
+    inertia = []
+    cluster_range = range(min_clusters, max_clusters + 1)
+    for n in cluster_range:
+        model, _ = clustering_function(data, X_coordinate_column, Y_coordinate_column, random_state, n_clusters, plot=False)  
+        coordinates = data[[X_coordinate_column, Y_coordinate_column]]
+        clusters = model.fit_predict(coordinates)
+        cluster_variance = sum(np.var(coordinates[clusters == i], axis=0).sum() for i in np.unique(clusters))
+        inertia.append(cluster_variance)
+
+    plt.plot(cluster_range, inertia, marker='o')
+    plt.xlabel('Number of Clusters')
+    plt.ylabel('Within-Cluster Variance')
+    plt.title('Elbow Method for Choosing n')
+    plt.show()
+
+    return inertia
+
 
