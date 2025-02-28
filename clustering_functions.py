@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import seaborn as sns
 from rdkit import Chem
+import hdbscan
 
 from sklearn.neighbors import NearestNeighbors
 from math import isnan
@@ -45,7 +46,7 @@ from bokeh.resources import INLINE
 from yellowbrick.cluster import SilhouetteVisualizer
 from bokeh.io import show
 import importlib
-import clustering_functions as cf
+from sklearn.cluster import AgglomerativeClustering, Birch 
 
 
 #interactive plotting things
@@ -815,5 +816,24 @@ def elbow_method(data, X_coordinate_column, Y_coordinate_column, min_clusters, m
     plt.show()
 
     return inertia
+    
+    
+def BIRCH_clustering(data, X_coordinate_column, Y_coordinate_column, random_state, 
+                     n_clusters, threshold, branching_factor, plot=True):
+    coordinates = data[[X_coordinate_column, Y_coordinate_column]]
+    birch_clustering= Birch(n_clusters=n_clusters, threshold=threshold, branching_factor=branching_factor )
+    birch_clusters = birch_clustering.fit_predict(coordinates)
+    data['cluster'] = birch_clusters
+
+    if plot:
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(x=X_coordinate_column, y=Y_coordinate_column, hue='cluster', 
+                        data=data, palette='viridis', s=100)
+        plt.xlabel(X_coordinate_column)
+        plt.ylabel(Y_coordinate_column)
+        plt.legend(title='Cluster')
+        plt.show()
+
+    return birch_clustering, data
 
 
